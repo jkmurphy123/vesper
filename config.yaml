@@ -12,8 +12,9 @@ ui:
   # Shown at startup, before any successful LLM response
   startup_background: "assets/startup.png"
   # Shown once the LLM has responded successfully (switched just before text is displayed)
-  active_background: "assets/angel.jpg"
+  active_background: "assets/angel.png"
 
+  background_image: "assets/startup.png"  # fallback if above not set
   text_box_opacity: 0.92        # 0..1
   text_box_margin: 24           # px
   text_box_rounding: 16         # px

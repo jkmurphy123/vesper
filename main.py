@@ -31,7 +31,7 @@ def main() -> int:
     # Window size & backgrounds
     width = int(ui_cfg.get("screen_width", 1000))
     height = int(ui_cfg.get("screen_height", 700))
-    startup_bg = ui_cfg.get("startup_background", ui_cfg.get("background_image", "assets/background.jpg"))
+    startup_bg = ui_cfg.get("startup_background", ui_cfg.get("background_image", "assets/startup.png"))
     active_bg = ui_cfg.get("active_background", startup_bg)
 
     app = QApplication(sys.argv)
