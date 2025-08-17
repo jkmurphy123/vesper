@@ -11,6 +11,11 @@ ui:
   font_family: "DejaVu Sans"
   font_point_size: 12
 
+  # NEW — status bar across the bottom
+  status_height: 28            # px
+  status_opacity: 0.80         # 0..1 (background alpha)
+  status_font_point_size: 10
+
 # Personalities are for later phases — listed here for continuity
 personalities:
   - name: "sarcastic cat"
