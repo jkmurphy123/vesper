@@ -1,41 +1,43 @@
-# ui_renderer.py — supports chunked display with fade transitions
+# ui_renderer.py — chunked display with fades + end-of-sequence signal + ESC to quit
 from __future__ import annotations
 from typing import Optional, Dict, List
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout, QSizePolicy, QGraphicsOpacityEffect
+    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout, QSizePolicy,
+    QGraphicsOpacityEffect, QApplication
 )
 
 class ConversationWindow(QMainWindow):
+    # Emitted when the LAST chunk has finished displaying
+    chunks_finished = pyqtSignal()
+
     def __init__(self, title: str, background_path: str, ui_cfg: dict,
                  balloon_cfg: Optional[Dict[str, int]] = None,
                  design_size: Optional[Dict[str, int]] = None) -> None:
-        print(f"[DEBUG] ConversationWindow.__init__ title={title}, background_path={background_path}")
         super().__init__()
         self.setWindowTitle(title)
 
-        # Base (design) size used for scaling speech balloon coordinates
+        # Base (design) size for scaling balloon coords
         self._design_w = int((design_size or {}).get("screen_width", ui_cfg.get("screen_width", 1000)))
         self._design_h = int((design_size or {}).get("screen_height", ui_cfg.get("screen_height", 700)))
 
         width = int(ui_cfg.get("screen_width", 1000))
         height = int(ui_cfg.get("screen_height", 700))
-        print(f"[DEBUG] Setting window size to {width}x{height} (design {self._design_w}x{self._design_h})")
-        self.resize(width, height)
+        print(f"[DEBUG] Setting window size to {width}x{height} (design {self._design_w}x{self._design_h})")        self.resize(width, height)
 
-        # --- Background layer ---
+        # Background
         self._bg_label = QLabel()
         self._bg_label.setAlignment(Qt.AlignCenter)
         self._bg_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # --- Overlay (absolute) for the balloon ---
+        # Overlay
         self._overlay = QWidget()
         self._overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self._overlay.setAttribute(Qt.WA_StyledBackground, False)
 
-        # The text widget (white rounded rectangle)
-        self._text = QTextBrowser(self._overlay)  # child of overlay so we can place absolutely
+        # Speech balloon (white rounded rect)
+        self._text = QTextBrowser(self._overlay)
         self._text.setReadOnly(True)
         self._text.setOpenExternalLinks(True)
         self._text.setAttribute(Qt.WA_StyledBackground, True)
@@ -43,13 +45,13 @@ class ConversationWindow(QMainWindow):
         self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        # Fade effect setup
+        # Fade effect
         self._opacity = QGraphicsOpacityEffect(self._text)
         self._text.setGraphicsEffect(self._opacity)
         self._opacity.setOpacity(1.0)
         self._fade = QPropertyAnimation(self._opacity, b"opacity", self)
         self._fade.setEasingCurve(QEasingCurve.InOutQuad)
-        self._fade.setDuration(800)  # ms
+        self._fade.setDuration(800)
 
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
         alpha = int(opacity * 255)
@@ -65,22 +67,22 @@ class ConversationWindow(QMainWindow):
         font = QFont(ui_cfg.get("font_family", "DejaVu Sans"), int(ui_cfg.get("font_point_size", 12)))
         self._text.setFont(font)
 
-        # Save balloon config (design-space coords)
+        # Balloon geometry
         self._balloon = balloon_cfg or {"x_pos": 100, "y_pos": 100, "width": int(width * 0.6), "height": int(height * 0.4)}
 
-        # --- Status bar ---
+        # Status bar
         self._status_label = QLabel("Ready")
         s_font = QFont(ui_cfg.get("font_family", "DejaVu Sans"), int(ui_cfg.get("status_font_point_size", ui_cfg.get("font_point_size", 10))))
         self._status_label.setFont(s_font)
         s_alpha = int(float(ui_cfg.get("status_opacity", 0.8)) * 255)
         self._status_label.setStyleSheet(f"QLabel {{ background-color: rgba(0,0,0,{s_alpha}); color: white; padding: 4px; }}")
 
-        # --- Build layered layout ---
+        # Layout
         self._stacked_host = QWidget()
         self._stacked = QStackedLayout(self._stacked_host)
         self._stacked.setStackingMode(QStackedLayout.StackAll)
-        self._stacked.addWidget(self._bg_label)   # layer 0
-        self._stacked.addWidget(self._overlay)    # layer 1
+        self._stacked.addWidget(self._bg_label)
+        self._stacked.addWidget(self._overlay)
 
         container = QWidget()
         outer = QVBoxLayout(container)
@@ -89,10 +91,9 @@ class ConversationWindow(QMainWindow):
         outer.addWidget(self._status_label, 0)
         self.setCentralWidget(container)
 
-        # Initialize background
+        # Background init
         self._background_path = background_path
         self._pixmap = QPixmap(self._background_path)
-        print(f"[DEBUG] Background path={self._background_path}, pixmapNull={self._pixmap.isNull()}")
         self._bg_label.installEventFilter(self)
         self._update_background()
 
@@ -104,12 +105,11 @@ class ConversationWindow(QMainWindow):
         self._delay_timer.setSingleShot(True)
         self._delay_timer.timeout.connect(self._on_delay_elapsed)
 
-        # When fade completes, react depending on direction
         self._fading_out = False
         self._fade.finished.connect(self._on_fade_finished)
 
+    # --- Geometry helpers ---
     def _apply_balloon_geometry(self):
-        # Scale from design-space to current window space
         w = max(self.width(), 1)
         h = max(self.height(), 1)
         sx = w / float(self._design_w)
@@ -118,9 +118,14 @@ class ConversationWindow(QMainWindow):
         by = int(self._balloon.get("y_pos", 0) * sy)
         bw = int(self._balloon.get("width", 300) * sx)
         bh = int(self._balloon.get("height", 200) * sy)
-        print(f"[DEBUG] Applying balloon geometry (scaled): x={bx}, y={by}, w={bw}, h={bh}, scale=({sx:.2f},{sy:.2f})")
         self._text.setGeometry(bx, by, bw, bh)
         self._text.raise_()
+
+    def set_balloon(self, balloon_cfg: Dict[str, int], design_size: Dict[str, int]) -> None:
+        self._balloon = balloon_cfg or self._balloon
+        self._design_w = int(design_size.get("screen_width", self._design_w))
+        self._design_h = int(design_size.get("screen_height", self._design_h))
+        QTimer.singleShot(0, self._apply_balloon_geometry)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -144,7 +149,6 @@ class ConversationWindow(QMainWindow):
             return
         scaled = self._pixmap.scaled(size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
         self._bg_label.setPixmap(scaled)
-        # Keep overlay above
         self._overlay.raise_()
         self._text.raise_()
 
@@ -153,41 +157,43 @@ class ConversationWindow(QMainWindow):
         self._pixmap = QPixmap(self._background_path)
         self._update_background()
 
+    def clear_text(self) -> None:
+        self._text.clear()
+        if self._text.graphicsEffect():
+            self._text.graphicsEffect().setOpacity(1.0)
+
     def display_text(self, html_or_text: str) -> None:
-        # Immediate set (no fade sequencing)
         self._text.setPlainText(html_or_text)
 
     # === Chunked playback API ===
     def play_chunks(self, chunks: List[str], delay_seconds: int = 30) -> None:
         """Begin showing chunks sequentially. Shows first chunk immediately,
         waits delay_seconds, fades out, swaps text, fades in, repeats.
-        """
+        """        
         if not chunks:
+            # Nothing to show; still notify completion so controller can loop
+            self.chunks_finished.emit()
             return
         self._chunks = chunks
         self._chunk_idx = 0
         self._chunk_delay_ms = max(1, delay_seconds) * 1000
-        # Show first chunk immediately
         self._opacity.setOpacity(1.0)
         self._text.setPlainText(self._chunks[self._chunk_idx])
         self._delay_timer.start(self._chunk_delay_ms)
         print(f"[DEBUG] play_chunks: total={len(chunks)} delay={delay_seconds}s")
 
     def _on_delay_elapsed(self):
-        # Start fade-out
         self._fading_out = True
         self._fade.stop()
         self._fade.setStartValue(self._opacity.opacity())
         self._fade.setEndValue(0.0)
         self._fade.start()
-        print("[DEBUG] Delay elapsed; starting fade-out")
 
     def _on_fade_finished(self):
         if self._fading_out:
-            # Swap to next chunk (if any), then fade back in
             self._chunk_idx += 1
             if self._chunk_idx >= len(self._chunks):
-                print("[DEBUG] All chunks shown; stopping")
+                self.chunks_finished.emit()
                 return
             self._text.setPlainText(self._chunks[self._chunk_idx])
             self._fading_out = False
@@ -195,12 +201,16 @@ class ConversationWindow(QMainWindow):
             self._fade.setStartValue(0.0)
             self._fade.setEndValue(1.0)
             self._fade.start()
-            print(f"[DEBUG] Switched to chunk {self._chunk_idx+1}/{len(self._chunks)}; starting fade-in")
         else:
-            # Fade-in finished; start next delay if more chunks ahead
             if self._chunk_idx < len(self._chunks) - 1:
                 self._delay_timer.start(self._chunk_delay_ms)
-                print("[DEBUG] Fade-in complete; starting next delay")
+
+    # ESC quits
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            QApplication.quit()
+        else:
+            super().keyPressEvent(event)
 
     def show_status(self, message: str) -> None:
         self._status_label.setText(message)
