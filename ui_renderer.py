@@ -24,7 +24,8 @@ class ConversationWindow(QMainWindow):
 
         width = int(ui_cfg.get("screen_width", 1000))
         height = int(ui_cfg.get("screen_height", 700))
-        print(f"[DEBUG] Setting window size to {width}x{height} (design {self._design_w}x{self._design_h})")        self.resize(width, height)
+        print(f"[DEBUG] Setting window size to {width}x{height} (design {self._design_w}x{self._design_h})")
+        self.resize(width, height)
 
         # Background
         self._bg_label = QLabel()
