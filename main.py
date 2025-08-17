@@ -1,9 +1,11 @@
-# main.py
+# main.py — Phase 2: personalities, persona prompt, image + balloon placement
 from __future__ import annotations
 import sys
+import random
 import yaml
 from pathlib import Path
-from PyQt5.QtCore import QTimer, QObject, pyqtSignal, QThread
+from typing import Dict, Any
+from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5.QtWidgets import QApplication
 
 from ui_renderer import ConversationWindow
@@ -32,7 +34,7 @@ class LLMWorker(QObject):
             self.error.emit(f"LLM init failed: {e}")
             return
         try:
-            text = llm.generate(self.prompt, max_tokens=200)
+            text = llm.generate(self.prompt, max_tokens=300)
         except Exception as e:
             self.error.emit(f"Generation failed: {e}")
             return
@@ -40,69 +42,105 @@ class LLMWorker(QObject):
 
 
 def load_config(cfg_path: Path) -> dict:
-    print(f"[DEBUG] Loading config from {cfg_path}")
     with cfg_path.open("r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    print(f"[DEBUG] Config loaded: {cfg}")
-    return cfg
+        return yaml.safe_load(f)
 
 
-def build_phase1_prompt() -> str:
-    return (
-        "You are a helpful language model."
-        "Write two short, friendly paragraphs (3-4 sentences total) saying hello and "
-        "describing one whimsical thought you just had."
+def pick_personality(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    plist = cfg.get("personalities", [])
+    if not plist:
+        return {}
+    return random.choice(plist)
+
+
+def build_phase2_prompt(persona: Dict[str, Any], topic: str) -> str:
+    """Compose instructions using prompt_persona, style_rules, and examples.
+    We keep it as a single completion prompt; later we can adopt chat templates.
+    """
+    prompt_persona = persona.get("prompt_persona", "You are a distinct voice.")
+    style_rules = persona.get("style_rules", [])
+    examples = persona.get("examples", [])
+    display_name = persona.get("display_name", persona.get("name", "Persona"))
+
+    rules_formatted = "".join([f"- {r}" for r in style_rules])
+    ex_formatted = "".join([f"Example — {display_name}: \"{e}\"" for e in examples])
+
+    # Instruct the model to write only the monologue, avoid meta or instructions.
+    prompt = (
+        f"{prompt_persona}"
+        f"Style rules: {rules_formatted}"
+        f"Reference tone/examples (do not repeat verbatim): {ex_formatted}"
+        f"Write a short monologue (~{persona.get('max_words_per_chunk', 85)} words) about the topic: '{topic}'."
+        f"Stay fully in character as {display_name}. Do not include stage directions or brackets."
     )
+    return prompt
 
 
 def main() -> int:
     cfg_path = Path(__file__).parent / "config.yaml"
-    print(f"[DEBUG] main() starting. Config path = {cfg_path}")
     cfg = load_config(cfg_path)
 
     ui_cfg = cfg.get("ui", {})
-    print(f"[DEBUG] UI config: {ui_cfg}")
-    title = ui_cfg.get("window_title", "LLM Stream of Consciousness — Phase 1")
+    title = ui_cfg.get("window_title", "LLM Stream of Consciousness — Phase 2")
 
-    width = int(ui_cfg.get("screen_width", 1000))
-    height = int(ui_cfg.get("screen_height", 700))
-    startup_bg = ui_cfg.get("startup_background", ui_cfg.get("background_image", "assets/background.jpg"))
-    active_bg = ui_cfg.get("active_background", ui_cfg.get("ready_background", startup_bg))
-    print(f"[DEBUG] Window size = {width}x{height}, startup_bg = {startup_bg}, active_bg = {active_bg}")
+    width = int(ui_cfg.get("screen_width", 1024))
+    height = int(ui_cfg.get("screen_height", 768))
+
+    # === Personality selection and assets ===
+    persona = pick_personality(cfg)
+    if not persona:
+        # Fallback if no personalities configured
+        persona = {
+            "display_name": "Default Persona",
+            "image_file_name": "background_active.jpg",
+            "speech_balloon": {"x_pos": 100, "y_pos": 100, "width": 600, "height": 300},
+            "max_words_per_chunk": 85,
+            "prompt_persona": "You are a thoughtful narrator.",
+            "style_rules": ["Be clear and engaging."],
+            "examples": ["A tiny example line."]
+        }
+
+    # Use personality image as both startup and active background for Phase 2
+    personality_img = persona.get("image_file_name", "background_active.jpg")
+    bg_path = str(Path("assets") / personality_img)
+
+    # Balloon geometry from persona
+    balloon_cfg = persona.get("speech_balloon", {})
 
     app = QApplication(sys.argv)
-
-    window = ConversationWindow(title=title, background_path=str(Path(startup_bg)), ui_cfg=ui_cfg)
+    window = ConversationWindow(
+        title=title,
+        background_path=bg_path,
+        ui_cfg=ui_cfg,
+        balloon_cfg=balloon_cfg,
+        design_size={"screen_width": ui_cfg.get("screen_width", 1024), "screen_height": ui_cfg.get("screen_height", 768)},
+    )
     window.resize(width, height)
     window.show()
-    window.show_status("App started • Initializing LLM in background…")
+    window.show_status(f"Persona: {persona.get('display_name', persona.get('name', 'Persona'))} • Warming up…")
 
-    # Spin up worker thread so UI stays responsive and paints startup image
+    # For now, seed with a simple topic. Next step we can ask the LLM for a topic first.
+    topic = "amusement parks"
+    prompt = build_phase2_prompt(persona, topic)
+
     model_path = cfg.get("model_path")
-    prompt = build_phase1_prompt()
 
     thread = QThread()
     worker = LLMWorker(model_path=model_path, prompt=prompt)
     worker.moveToThread(thread)
 
     def on_started():
-        print("[DEBUG] Worker thread started")
-        window.show_status("LLM initializing…")
+        window.show_status("Generating in character…")
 
     def on_finished(status: str, text: str):
-        print("[DEBUG] Worker finished; updating UI")
-        window.set_background(str(Path(active_bg)))
         window.display_text(text)
-        window.show_status("Generation complete ✔︎")
-        thread.quit()
-        thread.wait()
+        window.show_status("Done ✔︎")
+        thread.quit(); thread.wait()
 
     def on_error(msg: str):
-        print(f"[DEBUG] Worker error: {msg}")
         window.display_text(f"[LLM error] {msg} Check model_path in config.yaml and your llama-cpp-python install.")
         window.show_status("Error — see text.")
-        thread.quit()
-        thread.wait()
+        thread.quit(); thread.wait()
 
     thread.started.connect(on_started)
     thread.started.connect(worker.run)
