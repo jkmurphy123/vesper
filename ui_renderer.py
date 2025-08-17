@@ -1,9 +1,9 @@
 # ui_renderer.py
 from __future__ import annotations
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout
+    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout, QSizePolicy
 )
 
 class ConversationWindow(QMainWindow):
@@ -21,12 +21,14 @@ class ConversationWindow(QMainWindow):
         # --- Background layer ---
         self._bg_label = QLabel()
         self._bg_label.setAlignment(Qt.AlignCenter)
+        self._bg_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # --- Centered white rounded rectangle for text ---
         self._text = QTextBrowser()
         self._text.setReadOnly(True)
         self._text.setOpenExternalLinks(True)
         self._text.setAttribute(Qt.WA_StyledBackground, True)  # ensure stylesheet background paints
+        self._text.setAutoFillBackground(True)
 
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
         alpha = int(opacity * 255)
@@ -37,7 +39,7 @@ class ConversationWindow(QMainWindow):
             f"  background-color: rgba(255,255,255,{alpha});"
             f"  border-radius: {rounding}px;"
             "  padding: 16px;"
-            "  border: 2px solid rgba(0,0,0,60);"  # visible outline to confirm layering
+            "  border: 2px solid rgba(0,0,0,60);"
             "}"
         )
         font = QFont(
@@ -46,10 +48,11 @@ class ConversationWindow(QMainWindow):
         )
         self._text.setFont(font)
 
-        # Ensure visible even before content arrives
+        # Keep visible even before content arrives
         self._text.setMinimumWidth(int(width * 0.5))
         self._text.setMaximumWidth(int(width * 0.85))
         self._text.setMinimumHeight(int(height * 0.3))
+        self._text.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
         # --- Status bar at bottom ---
         self._status_label = QLabel("Ready")
@@ -89,7 +92,8 @@ class ConversationWindow(QMainWindow):
         outer.addWidget(self._status_label, 0)
         self.setCentralWidget(container)
 
-        # Make absolutely sure the text is on top
+        # Ensure overlay is atop background
+        self._overlay.raise_()
         self._text.raise_()
 
         # Initialize background
@@ -103,8 +107,17 @@ class ConversationWindow(QMainWindow):
         self._bg_label.installEventFilter(self)
         self._update_background()
 
-        # Dump layout metrics after first paint
+    # Fire once the window is shown to dump sizes
+    def showEvent(self, event):
+        super().showEvent(event)
+        print("[DEBUG] showEvent fired; scheduling geometry dump")
         QTimer.singleShot(0, self._dump_layout_metrics)
+
+    # Also log on every resize to confirm sizes
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        size = event.size()
+        print(f"[DEBUG] resizeEvent: window now {size.width()}x{size.height()}")
 
     def _dump_layout_metrics(self):
         print(
@@ -133,6 +146,9 @@ class ConversationWindow(QMainWindow):
         scaled = self._pixmap.scaled(size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
         self._bg_label.setPixmap(scaled)
         print("[DEBUG] Background pixmap applied")
+        # Re-assert overlay on top after background changes
+        self._overlay.raise_()
+        self._text.raise_()
 
     def set_background(self, path: str) -> None:
         print(f"[DEBUG] set_background called with path: {path}")
