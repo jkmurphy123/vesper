@@ -3,7 +3,7 @@ from __future__ import annotations
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout
+    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout
 )
 
 class ConversationWindow(QMainWindow):
@@ -18,23 +18,15 @@ class ConversationWindow(QMainWindow):
         print(f"[DEBUG] Setting window size to {width}x{height}")
         self.resize(width, height)
 
+        # --- Background layer ---
         self._bg_label = QLabel()
         self._bg_label.setAlignment(Qt.AlignCenter)
 
+        # --- Centered white rounded rectangle for text ---
         self._text = QTextBrowser()
         self._text.setReadOnly(True)
         self._text.setOpenExternalLinks(True)
 
-        # Status bar at bottom
-        self._status_label = QLabel("Ready")
-        font = QFont(
-            ui_cfg.get("font_family", "DejaVu Sans"),
-            int(ui_cfg.get("font_point_size", 10))
-        )
-        self._status_label.setFont(font)
-        self._status_label.setStyleSheet("background-color: rgba(0,0,0,150); color: white; padding: 4px;")
-
-        # Styling for white rounded rectangle feel via stylesheet
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
         rgba = int(opacity * 255)
         rounding = int(ui_cfg.get("text_box_rounding", 16))
@@ -46,24 +38,59 @@ class ConversationWindow(QMainWindow):
             f"padding: 16px;"
             f"}}"
         )
-
         font = QFont(
             ui_cfg.get("font_family", "DejaVu Sans"),
             int(ui_cfg.get("font_point_size", 12))
         )
         self._text.setFont(font)
 
-        container = QWidget()
-        layout = QVBoxLayout(container)
+        # Optional: constrain width a bit so it looks centered and readable
+        self._text.setMinimumWidth(int(width * 0.45))
+        self._text.setMaximumWidth(int(width * 0.8))
+
+        # --- Status bar at bottom ---
+        self._status_label = QLabel("Ready")
+        s_font = QFont(
+            ui_cfg.get("font_family", "DejaVu Sans"),
+            int(ui_cfg.get("status_font_point_size", ui_cfg.get("font_point_size", 10)))
+        )
+        self._status_label.setFont(s_font)
+        s_opacity = float(ui_cfg.get("status_opacity", 0.8))
+        s_rgba = int(s_opacity * 255)
+        self._status_label.setStyleSheet(
+            f"QLabel {{ background-color: rgba(0,0,0,{s_rgba}); color: white; padding: 4px; }}"
+        )
+
+        # --- Build layered layout: background + centered text overlay ---
         margin = int(ui_cfg.get("text_box_margin", 24))
         print(f"[DEBUG] Layout margins set to {margin}")
-        layout.setContentsMargins(margin, margin, margin, margin)
-        layout.addWidget(self._bg_label, stretch=1)
-        layout.addWidget(self._text, stretch=0)
-        layout.addWidget(self._status_label, stretch=0)
 
+        # Top area uses a stacked layout so text overlays the image
+        stacked_host = QWidget()
+        stacked = QStackedLayout(stacked_host)
+        stacked.setStackingMode(QStackedLayout.StackAll)
+
+        # Layer 0: background image
+        stacked.addWidget(self._bg_label)
+
+        # Layer 1: transparent overlay that centers the text box
+        overlay = QWidget()
+        overlay_layout = QVBoxLayout(overlay)
+        overlay_layout.setContentsMargins(margin, margin, margin, margin)
+        overlay_layout.addStretch(1)
+        overlay_layout.addWidget(self._text, 0, Qt.AlignHCenter | Qt.AlignVCenter)
+        overlay_layout.addStretch(1)
+        stacked.addWidget(overlay)
+
+        # Outer layout adds the stacked area and the status bar at the bottom
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(stacked_host, 1)
+        outer.addWidget(self._status_label, 0)
         self.setCentralWidget(container)
 
+        # Initialize background
         self._background_path = background_path
         print(f"[DEBUG] Initializing background with path: {self._background_path}")
         self._pixmap = QPixmap(self._background_path)
@@ -107,10 +134,8 @@ class ConversationWindow(QMainWindow):
 
     def display_text(self, html_or_text: str) -> None:
         print(f"[DEBUG] display_text called with text length={len(html_or_text)}")
-        if "<" in html_or_text and ">" in html_or_text:
-            self._text.setHtml(html_or_text)
-        else:
-            self._text.setPlainText(html_or_text)
+        # Show only the LLM response (caller already passes just the response)
+        self._text.setPlainText(html_or_text)
 
     def show_status(self, message: str) -> None:
         print(f"[DEBUG] show_status: {message}")
