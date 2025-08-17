@@ -15,6 +15,7 @@ class ConversationWindow(QMainWindow):
         # Size from config (defaults if missing)
         width = int(ui_cfg.get("screen_width", 1000))
         height = int(ui_cfg.get("screen_height", 700))
+        self.font = QFont("Sans Serif", 14)
         print(f"[DEBUG] Setting window size to {width}x{height}")
         self.resize(width, height)
 
