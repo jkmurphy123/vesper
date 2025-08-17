@@ -10,11 +10,11 @@ ui:
 
   # Background images
   # Shown at startup, before any successful LLM response
-  startup_background: "assets/startup.png"
+  startup_background: "startup.png"
   # Shown once the LLM has responded successfully (switched just before text is displayed)
-  #active_background: "assets/angel.png"
+  active_background: "assets/startup.png"
 
-  background_image: "assets/startup.png"  # fallback if above not set
+  background_image: "startup.png"  # fallback if above not set
   text_box_opacity: 0.92        # 0..1
   text_box_margin: 24           # px
   text_box_rounding: 16         # px
@@ -39,7 +39,7 @@ personalities:
     examples:
       - Sarcastic Cat: "Amusement parks are where humans pay to be gently terrified and sticky."
       - Sarcastic Cat: "Roller coasters? A gravity-powered regret machine with souvenir photos."
-    image_file_name: "assets/cat.png"
+    image_file_name: "cat.png"
     speech_balloon:
       x_pos: 470
       y_pos: 90
@@ -67,7 +67,7 @@ personalities:
       - "If your thoughts were acorns, which one would you hide from the world forever?"
       - "What’s one thing you’ve done in the last week that you wouldn’t tell your childhood self about?"
       - "Do you trust clouds? I mean, they’re just floating there… watching."
-    image_file_name: "assets/squirrel.png"
+    image_file_name: "squirrel.png"
     speech_balloon:
       x_pos: 470
       y_pos: 90
@@ -95,7 +95,7 @@ personalities:
       - "You seem anxious. Is it about that thing you didn’t tell your best friend? Don’t worry, I already know."
       - "If I were you, I’d apologize now — before they find out you’ve been Googling them."
       - "Heaven’s truth? That shirt does you no favors, but your honesty today is glowing."
-    image_file_name: "assets/angel.png"
+    image_file_name: "angel.png"
     speech_balloon:
       x_pos: 470
       y_pos: 115
@@ -125,7 +125,7 @@ personalities:
       - "Why do you think the mailman always wears gloves? To hide the anti-zombie serum burns."
       - "Grrrghh… keep your voice down, the pigeons are listening."
       - "You smell like rosemary. You know that’s how they *mark* you for capture, right?"
-    image_file_name: "assets/zombie.png"
+    image_file_name: "zombie.png"
     speech_balloon:
       x_pos: 450
       y_pos: 130

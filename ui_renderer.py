@@ -1,10 +1,10 @@
-# ui_renderer.py
+# ui_renderer.py — supports chunked display with fade transitions
 from __future__ import annotations
-from typing import Optional, Dict
-from PyQt5.QtCore import Qt, QTimer
+from typing import Optional, Dict, List
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout, QSizePolicy
+    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout, QSizePolicy, QGraphicsOpacityEffect
 )
 
 class ConversationWindow(QMainWindow):
@@ -40,6 +40,16 @@ class ConversationWindow(QMainWindow):
         self._text.setOpenExternalLinks(True)
         self._text.setAttribute(Qt.WA_StyledBackground, True)
         self._text.setAutoFillBackground(True)
+        self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # Fade effect setup
+        self._opacity = QGraphicsOpacityEffect(self._text)
+        self._text.setGraphicsEffect(self._opacity)
+        self._opacity.setOpacity(1.0)
+        self._fade = QPropertyAnimation(self._opacity, b"opacity", self)
+        self._fade.setEasingCurve(QEasingCurve.InOutQuad)
+        self._fade.setDuration(800)  # ms
 
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
         alpha = int(opacity * 255)
@@ -85,6 +95,18 @@ class ConversationWindow(QMainWindow):
         print(f"[DEBUG] Background path={self._background_path}, pixmapNull={self._pixmap.isNull()}")
         self._bg_label.installEventFilter(self)
         self._update_background()
+
+        # Chunk playback state
+        self._chunks: List[str] = []
+        self._chunk_idx = 0
+        self._chunk_delay_ms = 30000
+        self._delay_timer = QTimer(self)
+        self._delay_timer.setSingleShot(True)
+        self._delay_timer.timeout.connect(self._on_delay_elapsed)
+
+        # When fade completes, react depending on direction
+        self._fading_out = False
+        self._fade.finished.connect(self._on_fade_finished)
 
     def _apply_balloon_geometry(self):
         # Scale from design-space to current window space
@@ -132,7 +154,53 @@ class ConversationWindow(QMainWindow):
         self._update_background()
 
     def display_text(self, html_or_text: str) -> None:
+        # Immediate set (no fade sequencing)
         self._text.setPlainText(html_or_text)
+
+    # === Chunked playback API ===
+    def play_chunks(self, chunks: List[str], delay_seconds: int = 30) -> None:
+        """Begin showing chunks sequentially. Shows first chunk immediately,
+        waits delay_seconds, fades out, swaps text, fades in, repeats.
+        """
+        if not chunks:
+            return
+        self._chunks = chunks
+        self._chunk_idx = 0
+        self._chunk_delay_ms = max(1, delay_seconds) * 1000
+        # Show first chunk immediately
+        self._opacity.setOpacity(1.0)
+        self._text.setPlainText(self._chunks[self._chunk_idx])
+        self._delay_timer.start(self._chunk_delay_ms)
+        print(f"[DEBUG] play_chunks: total={len(chunks)} delay={delay_seconds}s")
+
+    def _on_delay_elapsed(self):
+        # Start fade-out
+        self._fading_out = True
+        self._fade.stop()
+        self._fade.setStartValue(self._opacity.opacity())
+        self._fade.setEndValue(0.0)
+        self._fade.start()
+        print("[DEBUG] Delay elapsed; starting fade-out")
+
+    def _on_fade_finished(self):
+        if self._fading_out:
+            # Swap to next chunk (if any), then fade back in
+            self._chunk_idx += 1
+            if self._chunk_idx >= len(self._chunks):
+                print("[DEBUG] All chunks shown; stopping")
+                return
+            self._text.setPlainText(self._chunks[self._chunk_idx])
+            self._fading_out = False
+            self._fade.stop()
+            self._fade.setStartValue(0.0)
+            self._fade.setEndValue(1.0)
+            self._fade.start()
+            print(f"[DEBUG] Switched to chunk {self._chunk_idx+1}/{len(self._chunks)}; starting fade-in")
+        else:
+            # Fade-in finished; start next delay if more chunks ahead
+            if self._chunk_idx < len(self._chunks) - 1:
+                self._delay_timer.start(self._chunk_delay_ms)
+                print("[DEBUG] Fade-in complete; starting next delay")
 
     def show_status(self, message: str) -> None:
         self._status_label.setText(message)

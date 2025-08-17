@@ -1,10 +1,10 @@
-# main.py — Phase 2: personalities, persona prompt, image + balloon placement
+# main.py — Phase 2: personalities, persona prompt, image + balloon placement + chunked playback
 from __future__ import annotations
 import sys
 import random
 import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5.QtWidgets import QApplication
 
@@ -34,7 +34,7 @@ class LLMWorker(QObject):
             self.error.emit(f"LLM init failed: {e}")
             return
         try:
-            text = llm.generate(self.prompt, max_tokens=300)
+            text = llm.generate(self.prompt, max_tokens=500)
         except Exception as e:
             self.error.emit(f"Generation failed: {e}")
             return
@@ -54,9 +54,6 @@ def pick_personality(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_phase2_prompt(persona: Dict[str, Any], topic: str) -> str:
-    """Compose instructions using prompt_persona, style_rules, and examples.
-    We keep it as a single completion prompt; later we can adopt chat templates.
-    """
     prompt_persona = persona.get("prompt_persona", "You are a distinct voice.")
     style_rules = persona.get("style_rules", [])
     examples = persona.get("examples", [])
@@ -65,15 +62,24 @@ def build_phase2_prompt(persona: Dict[str, Any], topic: str) -> str:
     rules_formatted = "".join([f"- {r}" for r in style_rules])
     ex_formatted = "".join([f"Example — {display_name}: \"{e}\"" for e in examples])
 
-    # Instruct the model to write only the monologue, avoid meta or instructions.
     prompt = (
         f"{prompt_persona}"
-        f"Style rules: {rules_formatted}"
-        f"Reference tone/examples (do not repeat verbatim): {ex_formatted}"
-        f"Write a short monologue (~{persona.get('max_words_per_chunk', 85)} words) about the topic: '{topic}'."
+        f"Style rules:{rules_formatted}"
+        f"Reference tone/examples (do not repeat verbatim):{ex_formatted}"
+        f"Write a monologue (~{persona.get('max_words_per_chunk', 85) * 3} words) about the topic: '{topic}'."
         f"Stay fully in character as {display_name}. Do not include stage directions or brackets."
     )
     return prompt
+
+
+def chunk_text_by_words(text: str, max_words: int) -> List[str]:
+    words = text.split()
+    chunks: List[str] = []
+    for i in range(0, len(words), max(1, max_words)):
+        chunk = " ".join(words[i:i+max_words]).strip()
+        if chunk:
+            chunks.append(chunk)
+    return chunks
 
 
 def main() -> int:
@@ -89,7 +95,6 @@ def main() -> int:
     # === Personality selection and assets ===
     persona = pick_personality(cfg)
     if not persona:
-        # Fallback if no personalities configured
         persona = {
             "display_name": "Default Persona",
             "image_file_name": "background_active.jpg",
@@ -100,11 +105,9 @@ def main() -> int:
             "examples": ["A tiny example line."]
         }
 
-    # Use personality image as both startup and active background for Phase 2
     personality_img = persona.get("image_file_name", "background_active.jpg")
     bg_path = str(Path("assets") / personality_img)
 
-    # Balloon geometry from persona
     balloon_cfg = persona.get("speech_balloon", {})
 
     app = QApplication(sys.argv)
@@ -117,9 +120,8 @@ def main() -> int:
     )
     window.resize(width, height)
     window.show()
-    window.show_status(f"Persona: {persona.get('display_name', persona.get('name', 'Persona'))} • Warming up…")
+    window.show_status(f"Persona: {persona.get('display_name', persona.get('name', 'Persona'))} • Generating…")
 
-    # For now, seed with a simple topic. Next step we can ask the LLM for a topic first.
     topic = "amusement parks"
     prompt = build_phase2_prompt(persona, topic)
 
@@ -133,8 +135,14 @@ def main() -> int:
         window.show_status("Generating in character…")
 
     def on_finished(status: str, text: str):
-        window.display_text(text)
-        window.show_status("Done ✔︎")
+        max_words = int(persona.get('max_words_per_chunk', 85))
+        chunks = chunk_text_by_words(text, max_words)
+        if not chunks:
+            window.display_text("[Empty response]")
+            window.show_status("No content returned")
+        else:
+            window.play_chunks(chunks, delay_seconds=30)
+            window.show_status(f"Showing {len(chunks)} chunks • {max_words} words each")
         thread.quit(); thread.wait()
 
     def on_error(msg: str):
