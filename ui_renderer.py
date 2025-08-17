@@ -58,7 +58,7 @@ class ConversationWindow(QMainWindow):
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
         alpha = int(opacity * 255)
         rounding = int(ui_cfg.get("text_box_rounding", 16))
-        self._text.self.balloon.setStyleSheet("background-color: white; border: none; border-radius: 15px;")
+        self._text.setStyleSheet("background-color: white; border: none; border-radius: 15px;")
         font = QFont(ui_cfg.get("font_family", "DejaVu Sans"), int(ui_cfg.get("font_point_size", 16)))
         self._text.setFont(font)
 
