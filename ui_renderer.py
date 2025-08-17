@@ -45,6 +45,7 @@ class ConversationWindow(QMainWindow):
         self._text.setAutoFillBackground(True)
         self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._text.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
 
         # Fade effect
         self._opacity = QGraphicsOpacityEffect(self._text)

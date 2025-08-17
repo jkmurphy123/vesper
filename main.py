@@ -71,16 +71,46 @@ def build_phase2_prompt(persona: Dict[str, Any], topic: str) -> str:
     )
     return prompt
 
+def chunk_text_by_sentences(text: str, max_words: int) -> List[str]:
+    """
+    Group full sentences until ~max_words. If a single sentence exceeds the cap,
+    hard-split that sentence by words so nothing disappears.
+    """
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    chunks, current, count = [], [], 0
 
-def chunk_text_by_words(text: str, max_words: int) -> List[str]:
-    words = text.split()
-    chunks: List[str] = []
-    for i in range(0, len(words), max(1, max_words)):
-        chunk = " ".join(words[i:i+max_words]).strip()
-        if chunk:
-            chunks.append(chunk)
-    return chunks
+    def flush():
+        nonlocal current, count
+        if current:
+            chunks.append(" ".join(current).strip())
+            current, count = [], 0
 
+    for s in sentences:
+        if not s:
+            continue
+        words = s.split()
+        if not words:
+            continue
+
+        # If one sentence is longer than the cap, split that sentence by words.
+        if len(words) > max_words:
+            flush()
+            for i in range(0, len(words), max_words):
+                part = " ".join(words[i:i+max_words]).strip()
+                if part:
+                    chunks.append(part)
+            continue
+
+        if count + len(words) <= max_words:
+            current.append(s)
+            count += len(words)
+        else:
+            flush()
+            current = [s]
+            count = len(words)
+
+    flush()
+    return [c for c in chunks if c]
 
 def main() -> int:
     cfg_path = Path(__file__).parent / "config.yaml"
@@ -136,7 +166,7 @@ def main() -> int:
 
     def on_finished(status: str, text: str):
         max_words = int(persona.get('max_words_per_chunk', 85))
-        chunks = chunk_text_by_words(text, max_words)
+        chunks = chunk_text_by_sentences(text, max_words)
         if not chunks:
             window.display_text("[Empty response]")
             window.show_status("No content returned")
