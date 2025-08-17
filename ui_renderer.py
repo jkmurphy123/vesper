@@ -44,9 +44,10 @@ class ConversationWindow(QMainWindow):
         )
         self._text.setFont(font)
 
-        # Optional: constrain width a bit so it looks centered and readable
-        self._text.setMinimumWidth(int(width * 0.45))
-        self._text.setMaximumWidth(int(width * 0.8))
+        # Ensure visible even before content arrives
+        self._text.setMinimumWidth(int(width * 0.5))
+        self._text.setMaximumWidth(int(width * 0.85))
+        self._text.setMinimumHeight(int(height * 0.3))
 
         # --- Status bar at bottom ---
         self._status_label = QLabel("Ready")
@@ -65,16 +66,13 @@ class ConversationWindow(QMainWindow):
         margin = int(ui_cfg.get("text_box_margin", 24))
         print(f"[DEBUG] Layout margins set to {margin}")
 
-        # Top area uses a stacked layout so text overlays the image
         stacked_host = QWidget()
         stacked = QStackedLayout(stacked_host)
         stacked.setStackingMode(QStackedLayout.StackAll)
+        stacked.addWidget(self._bg_label)  # layer 0
 
-        # Layer 0: background image
-        stacked.addWidget(self._bg_label)
-
-        # Layer 1: transparent overlay that centers the text box
-        overlay = QWidget()
+        overlay = QWidget()  # layer 1
+        overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         overlay_layout = QVBoxLayout(overlay)
         overlay_layout.setContentsMargins(margin, margin, margin, margin)
         overlay_layout.addStretch(1)
@@ -82,7 +80,6 @@ class ConversationWindow(QMainWindow):
         overlay_layout.addStretch(1)
         stacked.addWidget(overlay)
 
-        # Outer layout adds the stacked area and the status bar at the bottom
         container = QWidget()
         outer = QVBoxLayout(container)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -134,7 +131,6 @@ class ConversationWindow(QMainWindow):
 
     def display_text(self, html_or_text: str) -> None:
         print(f"[DEBUG] display_text called with text length={len(html_or_text)}")
-        # Show only the LLM response (caller already passes just the response)
         self._text.setPlainText(html_or_text)
 
     def show_status(self, message: str) -> None:
