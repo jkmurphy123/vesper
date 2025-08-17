@@ -1,0 +1,3 @@
+PyQt5==5.15.10
+pyyaml>=6.0.1
+# llama-cpp-python must be built to match your Jetson setup; install separately (see notes below)

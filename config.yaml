@@ -1,0 +1,21 @@
+# Path to your local GGUF model (e.g., a 4–8B quant) on the Jetson's filesystem
+model_path: "/home/ubuntu/models/qwen2-7b-instruct-q5_k_m.gguf"
+
+# UI settings
+ui:
+  window_title: "LLM Stream of Consciousness — Phase 1"
+  background_image: "assets/background.jpg"
+  text_box_opacity: 0.92        # 0..1
+  text_box_margin: 24           # px
+  text_box_rounding: 16         # px
+  font_family: "DejaVu Sans"
+  font_point_size: 12
+
+# Personalities are for later phases — listed here for continuity
+personalities:
+  - name: "sarcastic cat"
+    style: "dry, sardonic, a touch of superiority; short claws of humor"
+  - name: "gentle philosopher"
+    style: "calm, reflective, metaphor-friendly"
+  - name: "overcaffeinated engineer"
+    style: "rapid-fire, technical asides, playful footnotes"
