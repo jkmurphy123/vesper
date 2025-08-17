@@ -1,6 +1,7 @@
 # main.py — Phase 2: personalities, persona prompt, image + balloon placement + chunked playback
 from __future__ import annotations
 import sys
+import re
 import random
 import yaml
 from pathlib import Path
