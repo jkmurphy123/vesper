@@ -1,6 +1,6 @@
 # ui_renderer.py
 from __future__ import annotations
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout
@@ -15,33 +15,30 @@ class ConversationWindow(QMainWindow):
         # Size from config (defaults if missing)
         width = int(ui_cfg.get("screen_width", 1000))
         height = int(ui_cfg.get("screen_height", 700))
-        self.font = QFont("Sans Serif", 14)
         print(f"[DEBUG] Setting window size to {width}x{height}")
         self.resize(width, height)
 
         # --- Background layer ---
         self._bg_label = QLabel()
-        self._bg_label.setWordWrap(True)
-        self._bg_label.setFont(self.font)
-        self._bg_label.setStyleSheet("color: black; background: transparent;")
         self._bg_label.setAlignment(Qt.AlignCenter)
-        self._bg_label.setText("")
 
         # --- Centered white rounded rectangle for text ---
         self._text = QTextBrowser()
         self._text.setReadOnly(True)
         self._text.setOpenExternalLinks(True)
+        self._text.setAttribute(Qt.WA_StyledBackground, True)  # ensure stylesheet background paints
 
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
-        rgba = int(opacity * 255)
+        alpha = int(opacity * 255)
         rounding = int(ui_cfg.get("text_box_rounding", 16))
-        print(f"[DEBUG] Text box style: opacity={opacity}, rgba={rgba}, rounding={rounding}")
+        print(f"[DEBUG] Text box style: opacity={opacity}, alpha255={alpha}, rounding={rounding}")
         self._text.setStyleSheet(
-            f"QTextBrowser {{"
-            f"background-color: rgba(255,255,255,{rgba});"
-            f"border-radius: {rounding}px;"
-            f"padding: 16px;"
-            f"}}"
+            "QTextBrowser {"
+            f"  background-color: rgba(255,255,255,{alpha});"
+            f"  border-radius: {rounding}px;"
+            "  padding: 16px;"
+            "  border: 2px solid rgba(0,0,0,60);"  # visible outline to confirm layering
+            "}"
         )
         font = QFont(
             ui_cfg.get("font_family", "DejaVu Sans"),
@@ -62,35 +59,38 @@ class ConversationWindow(QMainWindow):
         )
         self._status_label.setFont(s_font)
         s_opacity = float(ui_cfg.get("status_opacity", 0.8))
-        s_rgba = int(s_opacity * 255)
+        s_alpha = int(s_opacity * 255)
         self._status_label.setStyleSheet(
-            f"QLabel {{ background-color: rgba(0,0,0,{s_rgba}); color: white; padding: 4px; }}"
+            f"QLabel {{ background-color: rgba(0,0,0,{s_alpha}); color: white; padding: 4px; }}"
         )
 
         # --- Build layered layout: background + centered text overlay ---
         margin = int(ui_cfg.get("text_box_margin", 24))
         print(f"[DEBUG] Layout margins set to {margin}")
 
-        stacked_host = QWidget()
-        stacked = QStackedLayout(stacked_host)
-        stacked.setStackingMode(QStackedLayout.StackAll)
-        stacked.addWidget(self._bg_label)  # layer 0
+        self._stacked_host = QWidget()
+        self._stacked = QStackedLayout(self._stacked_host)
+        self._stacked.setStackingMode(QStackedLayout.StackAll)
+        self._stacked.addWidget(self._bg_label)  # layer 0
 
-        overlay = QWidget()  # layer 1
-        overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        overlay_layout = QVBoxLayout(overlay)
+        self._overlay = QWidget()  # layer 1
+        self._overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        overlay_layout = QVBoxLayout(self._overlay)
         overlay_layout.setContentsMargins(margin, margin, margin, margin)
         overlay_layout.addStretch(1)
         overlay_layout.addWidget(self._text, 0, Qt.AlignHCenter | Qt.AlignVCenter)
         overlay_layout.addStretch(1)
-        stacked.addWidget(overlay)
+        self._stacked.addWidget(self._overlay)
 
         container = QWidget()
         outer = QVBoxLayout(container)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(stacked_host, 1)
+        outer.addWidget(self._stacked_host, 1)
         outer.addWidget(self._status_label, 0)
         self.setCentralWidget(container)
+
+        # Make absolutely sure the text is on top
+        self._text.raise_()
 
         # Initialize background
         self._background_path = background_path
@@ -102,6 +102,16 @@ class ConversationWindow(QMainWindow):
             print("[DEBUG] Initial QPixmap loaded successfully")
         self._bg_label.installEventFilter(self)
         self._update_background()
+
+        # Dump layout metrics after first paint
+        QTimer.singleShot(0, self._dump_layout_metrics)
+
+    def _dump_layout_metrics(self):
+        print(
+            f"[DEBUG] Geometries — window={self.size().width()}x{self.size().height()}, "
+            f"bg_label={self._bg_label.size().width()}x{self._bg_label.size().height()}, "
+            f"text={self._text.size().width()}x{self._text.size().height()}"
+        )
 
     def eventFilter(self, obj, event):
         if obj is self._bg_label and event.type() == event.Resize:
