@@ -45,7 +45,7 @@ class ConversationWindow(QMainWindow):
         self._text.setAutoFillBackground(True)
         self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._text.setAlignment(Qt.AlignCenter)
+        self._text.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
 
         # Fade effect
         self._opacity = QGraphicsOpacityEffect(self._text)
@@ -95,7 +95,7 @@ class ConversationWindow(QMainWindow):
         # Chunk playback state
         self._chunks: List[str] = []
         self._chunk_idx = 0
-        self._chunk_delay_ms = 30000
+        self._chunk_delay_ms = 20000
         self._delay_timer = QTimer(self)
         self._delay_timer.setSingleShot(True)
         self._delay_timer.timeout.connect(self._on_delay_elapsed)
