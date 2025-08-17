@@ -8,35 +8,42 @@ from PyQt5.QtWidgets import QApplication
 from ui_renderer import ConversationWindow
 from llm_interface import LLMInterface
 
+
 def load_config(cfg_path: Path) -> dict:
     with cfg_path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+
 def build_phase1_prompt() -> str:
     return (
-        "You are a helpful language model.\n"
-        "Write two short, friendly paragraphs (3-4 sentences total) saying hello and \n"
+        "You are a helpful language model.
+"
+        "Write two short, friendly paragraphs (3-4 sentences total) saying hello and 
+"
         "describing one whimsical thought you just had."
     )
 
+
 def main() -> int:
-    cfg_path = Path(__file__).parent / "config.yaml"
-    cfg = load_config(cfg_path)
+    cfg = load_config(Path(__file__).parent / "config.yaml")
 
     ui_cfg = cfg.get("ui", {})
     title = ui_cfg.get("window_title", "LLM Stream of Consciousness — Phase 1")
-    bg_path = ui_cfg.get("background_image", "assets/background.jpg")
+
+    # Window size & backgrounds
+    width = int(ui_cfg.get("screen_width", 1000))
+    height = int(ui_cfg.get("screen_height", 700))
+    startup_bg = ui_cfg.get("startup_background", ui_cfg.get("background_image", "assets/background.jpg"))
+    active_bg = ui_cfg.get("active_background", startup_bg)
 
     app = QApplication(sys.argv)
-    window = ConversationWindow(title=title, background_path=str(Path(bg_path)), ui_cfg=ui_cfg)
+    window = ConversationWindow(title=title, background_path=str(Path(startup_bg)), ui_cfg=ui_cfg)
+    window.resize(width, height)  # ensure size on startup
     window.show()
-
-    # NEW — status messages
-    window.set_status("Loaded UI • Reading config…")
+    window.show_status("App started. Initializing LLM…")
 
     # Initialize the local LLM
     model_path = cfg.get("model_path")
-    window.set_status("Initializing LLM…")
     try:
         llm = LLMInterface(
             model_path=model_path,
@@ -45,24 +52,31 @@ def main() -> int:
             temperature=0.7,
             top_p=0.95,
         )
-        window.set_status("LLM ready ✔︎ • Preparing prompt…")
+        window.show_status("LLM initialized. Sending test prompt…")
     except Exception as e:
-        window.set_status("LLM init failed ✖ — see on-screen text for details.")
-        window.display_text(f"[LLM error] {e}\n\nCheck model_path in config.yaml and your llama-cpp-python install.")
+        window.display_text(f"[LLM error] {e}
+
+Check model_path in config.yaml and your llama-cpp-python install.")
+        window.show_status("Failed to initialize LLM.")
         return app.exec_()
 
     # Phase 1 test prompt
     prompt = build_phase1_prompt()
-    window.set_status("Generating… (this may take a moment)")
     try:
         text = llm.generate(prompt, max_tokens=200)
-        window.set_status("Generation complete ✔︎")
+        # Switch background ONLY after a successful response, just before displaying text
+        window.set_background(str(Path(active_bg)))
+        window.show_status("LLM response received.")
     except Exception as e:
-        text = f"[LLM error] {e}\n\nCheck model_path in config.yaml and your llama-cpp-python install."
-        window.set_status("Generation failed ✖")
+        text = f"[LLM error] {e}
+
+Check model_path in config.yaml and your llama-cpp-python install."
+        window.show_status("LLM generation failed.")
 
     window.display_text(text)
+    window.show_status("Display updated.")
     return app.exec_()
+
 
 if __name__ == "__main__":
     sys.exit(main())

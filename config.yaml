@@ -4,7 +4,16 @@ model_path: "/home/ubuntu/models/qwen2-7b-instruct-q5_k_m.gguf"
 # UI settings
 ui:
   window_title: "LLM Stream of Consciousness — Phase 1"
-  background_image: "assets/background.jpg"
+  # NEW: window size (also represents background image design size)
+  screen_width: 1024
+  screen_height: 768
+
+  # Background images
+  # Shown at startup, before any successful LLM response
+  startup_background: "assets/startup.png"
+  # Shown once the LLM has responded successfully (switched just before text is displayed)
+  active_background: "assets/angel.jpg"
+
   text_box_opacity: 0.92        # 0..1
   text_box_margin: 24           # px
   text_box_rounding: 16         # px
