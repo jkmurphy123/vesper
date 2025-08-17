@@ -45,7 +45,7 @@ class ConversationWindow(QMainWindow):
         self._text.setAutoFillBackground(True)
         self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._text.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        self._text.setAlignment(Qt.AlignCenter)
 
         # Fade effect
         self._opacity = QGraphicsOpacityEffect(self._text)
@@ -58,15 +58,8 @@ class ConversationWindow(QMainWindow):
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
         alpha = int(opacity * 255)
         rounding = int(ui_cfg.get("text_box_rounding", 16))
-        self._text.setStyleSheet(
-            "QTextBrowser {"
-            f"  background-color: rgba(255,255,255,{alpha});"
-            f"  border-radius: {rounding}px;"
-            "  padding: 16px;"
-            "  border: 2px solid rgba(0,0,0,60);"
-            "}"
-        )
-        font = QFont(ui_cfg.get("font_family", "DejaVu Sans"), int(ui_cfg.get("font_point_size", 12)))
+        self._text.self.balloon.setStyleSheet("background-color: white; border: none; border-radius: 15px;")
+        font = QFont(ui_cfg.get("font_family", "DejaVu Sans"), int(ui_cfg.get("font_point_size", 16)))
         self._text.setFont(font)
 
         # Balloon geometry
