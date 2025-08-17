@@ -20,7 +20,11 @@ class ConversationWindow(QMainWindow):
 
         # --- Background layer ---
         self._bg_label = QLabel()
+        self._bg_label.setWordWrap(True)
+        self._bg_label.setFont(self.font)
+        self._bg_label.setStyleSheet("color: black; background: transparent;")
         self._bg_label.setAlignment(Qt.AlignCenter)
+        self._bg_label.setText("")
 
         # --- Centered white rounded rectangle for text ---
         self._text = QTextBrowser()
