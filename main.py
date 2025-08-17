@@ -16,10 +16,8 @@ def load_config(cfg_path: Path) -> dict:
 
 def build_phase1_prompt() -> str:
     return (
-        "You are a helpful language model.
-"
-        "Write two short, friendly paragraphs (3-4 sentences total) saying hello and 
-"
+        "You are a helpful language model."
+        "Write two short, friendly paragraphs (3-4 sentences total) saying hello and "
         "describing one whimsical thought you just had."
     )
 
@@ -54,9 +52,7 @@ def main() -> int:
         )
         window.show_status("LLM initialized. Sending test prompt…")
     except Exception as e:
-        window.display_text(f"[LLM error] {e}
-
-Check model_path in config.yaml and your llama-cpp-python install.")
+        window.display_text(f"[LLM error] {e} Check model_path in config.yaml and your llama-cpp-python install.")
         window.show_status("Failed to initialize LLM.")
         return app.exec_()
 
@@ -68,9 +64,7 @@ Check model_path in config.yaml and your llama-cpp-python install.")
         window.set_background(str(Path(active_bg)))
         window.show_status("LLM response received.")
     except Exception as e:
-        text = f"[LLM error] {e}
-
-Check model_path in config.yaml and your llama-cpp-python install."
+        text = f"[LLM error] {e} Check model_path in config.yaml and your llama-cpp-python install."
         window.show_status("LLM generation failed.")
 
     window.display_text(text)
