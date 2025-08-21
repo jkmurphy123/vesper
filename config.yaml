@@ -1,6 +1,8 @@
 # Path to your local GGUF model (e.g., a 4–8B quant) on the Jetson's filesystem
 model_path: "/home/ubuntu/models/qwen2-7b-instruct-q5_k_m.gguf"
 
+num_characters: 3   # how many personas to run (sequentially) before stopping
+
 # UI settings
 ui:
   window_title: "LLM Stream of Consciousness — Phase 1"
