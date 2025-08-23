@@ -38,14 +38,17 @@ class ConversationWindow(QMainWindow):
         self._overlay.setAttribute(Qt.WA_StyledBackground, False)
 
         # Speech balloon (white rounded rect)
-        self._text = QTextBrowser(self._overlay)
-        self._text.setReadOnly(True)
-        self._text.setOpenExternalLinks(True)
-        self._text.setAttribute(Qt.WA_StyledBackground, True)
-        self._text.setAutoFillBackground(True)
-        self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._text.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        # self._text = QTextBrowser(self._overlay)
+        # self._text.setReadOnly(True)
+        # self._text.setOpenExternalLinks(True)
+        # self._text.setAttribute(Qt.WA_StyledBackground, True)
+        # self._text.setAutoFillBackground(True)
+        # self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # self._text.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        self._text = QLabel(self._overlay)
+        self._text.setAlignment(Qt.AlignCenter)  # centers both vertically and horizontally
+        self._text.setWordWrap(True)        
 
         # Fade effect
         self._opacity = QGraphicsOpacityEffect(self._text)
@@ -158,7 +161,7 @@ class ConversationWindow(QMainWindow):
             self._text.graphicsEffect().setOpacity(1.0)
 
     def display_text(self, html_or_text: str) -> None:
-        self._text.setPlainText(html_or_text)
+        self._text.setText(html_or_text)
 
     # === Chunked playback API ===
     def play_chunks(self, chunks: List[str], delay_seconds: int = 30) -> None:
