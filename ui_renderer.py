@@ -1,10 +1,10 @@
-# ui_renderer.py — chunked display with fades + end-of-sequence signal + ESC to quit
+# ui_renderer.py — QLabel-based balloon (centered text) + fades + end-of-sequence signal + ESC to quit
 from __future__ import annotations
 from typing import Optional, Dict, List
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal, QEvent
 from PyQt5.QtGui import QPixmap, QFont
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QLabel, QTextBrowser, QVBoxLayout, QStackedLayout, QSizePolicy,
+    QMainWindow, QWidget, QLabel, QVBoxLayout, QStackedLayout, QSizePolicy,
     QGraphicsOpacityEffect, QApplication
 )
 
@@ -32,23 +32,17 @@ class ConversationWindow(QMainWindow):
         self._bg_label.setAlignment(Qt.AlignCenter)
         self._bg_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # Overlay
+        # Overlay layer to host the balloon
         self._overlay = QWidget()
         self._overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self._overlay.setAttribute(Qt.WA_StyledBackground, False)
 
-        # Speech balloon (white rounded rect)
-        # self._text = QTextBrowser(self._overlay)
-        # self._text.setReadOnly(True)
-        # self._text.setOpenExternalLinks(True)
-        # self._text.setAttribute(Qt.WA_StyledBackground, True)
-        # self._text.setAutoFillBackground(True)
-        # self._text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # self._text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # self._text.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        # Speech balloon (white rounded rect) — QLabel for easy centering
         self._text = QLabel(self._overlay)
-        self._text.setAlignment(Qt.AlignCenter)  # centers both vertically and horizontally
-        self._text.setWordWrap(True)        
+        self._text.setWordWrap(True)
+        self._text.setAlignment(Qt.AlignCenter)  # centers H & V
+        self._text.setAttribute(Qt.WA_StyledBackground, True)
+        self._text.setAutoFillBackground(True)
 
         # Fade effect
         self._opacity = QGraphicsOpacityEffect(self._text)
@@ -58,10 +52,13 @@ class ConversationWindow(QMainWindow):
         self._fade.setEasingCurve(QEasingCurve.InOutQuad)
         self._fade.setDuration(800)
 
+        # Styling
         opacity = float(ui_cfg.get("text_box_opacity", 0.92))
-        alpha = int(opacity * 255)
-        rounding = int(ui_cfg.get("text_box_rounding", 16))
-        self._text.setStyleSheet("background-color: white; border: none; border-radius: 15px;")
+        rounding = int(ui_cfg.get("text_box_rounding", 15))
+        self._text.setStyleSheet(
+            f"QLabel {{ background-color: rgba(255,255,255,{opacity});"
+            f" border: none; border-radius: {rounding}px; padding: 12px; }}"
+        )
         font = QFont(ui_cfg.get("font_family", "DejaVu Sans"), int(ui_cfg.get("font_point_size", 16)))
         self._text.setFont(font)
 
@@ -70,10 +67,13 @@ class ConversationWindow(QMainWindow):
 
         # Status bar
         self._status_label = QLabel("Ready")
-        s_font = QFont(ui_cfg.get("font_family", "DejaVu Sans"), int(ui_cfg.get("status_font_point_size", ui_cfg.get("font_point_size", 10))))
+        s_font = QFont(ui_cfg.get("font_family", "DejaVu Sans"),
+                       int(ui_cfg.get("status_font_point_size", ui_cfg.get("font_point_size", 10))))
         self._status_label.setFont(s_font)
-        s_alpha = int(float(ui_cfg.get("status_opacity", 0.8)) * 255)
-        self._status_label.setStyleSheet(f"QLabel {{ background-color: rgba(0,0,0,{s_alpha}); color: white; padding: 4px; }}")
+        s_opacity = float(ui_cfg.get("status_opacity", 0.8))
+        self._status_label.setStyleSheet(
+            f"QLabel {{ background-color: rgba(0,0,0,{s_opacity}); color: white; padding: 4px; }}"
+        )
 
         # Layout
         self._stacked_host = QWidget()
@@ -134,7 +134,7 @@ class ConversationWindow(QMainWindow):
         self._apply_balloon_geometry()
 
     def eventFilter(self, obj, event):
-        if obj is self._bg_label and event.type() == event.Resize:
+        if obj is self._bg_label and event.type() == QEvent.Resize:
             self._update_background()
         return super().eventFilter(obj, event)
 
@@ -156,18 +156,19 @@ class ConversationWindow(QMainWindow):
         self._update_background()
 
     def clear_text(self) -> None:
-        self._text.clear()
+        self._text.setText("")
         if self._text.graphicsEffect():
             self._text.graphicsEffect().setOpacity(1.0)
 
     def display_text(self, html_or_text: str) -> None:
+        # QLabel supports simple HTML; keep it plain unless you need markup
         self._text.setText(html_or_text)
 
     # === Chunked playback API ===
     def play_chunks(self, chunks: List[str], delay_seconds: int = 30) -> None:
         """Begin showing chunks sequentially. Shows first chunk immediately,
         waits delay_seconds, fades out, swaps text, fades in, repeats.
-        """        
+        """
         if not chunks:
             # Nothing to show; still notify completion so controller can loop
             self.chunks_finished.emit()
@@ -176,7 +177,7 @@ class ConversationWindow(QMainWindow):
         self._chunk_idx = 0
         self._chunk_delay_ms = max(1, delay_seconds) * 1000
         self._opacity.setOpacity(1.0)
-        self._text.setPlainText(self._chunks[self._chunk_idx])
+        self._text.setText(self._chunks[self._chunk_idx])
         self._delay_timer.start(self._chunk_delay_ms)
         print(f"[DEBUG] play_chunks: total={len(chunks)} delay={delay_seconds}s")
 
@@ -193,7 +194,7 @@ class ConversationWindow(QMainWindow):
             if self._chunk_idx >= len(self._chunks):
                 self.chunks_finished.emit()
                 return
-            self._text.setPlainText(self._chunks[self._chunk_idx])
+            self._text.setText(self._chunks[self._chunk_idx])
             self._fading_out = False
             self._fade.stop()
             self._fade.setStartValue(0.0)
