@@ -1,4 +1,4 @@
-# main.py — loop characters endlessly (Jetson-safe: 1 model, 1 worker thread)
+# main.py — endless loop + LLM-picked visible topic (Jetson-safe: 1 model, 1 worker thread)
 from __future__ import annotations
 import sys, random, re, yaml
 from pathlib import Path
@@ -55,6 +55,10 @@ def build_prompt(persona: Dict[str, Any], topic: str) -> str:
 
 
 def chunk_text_by_sentences(text: str, max_words: int) -> List[str]:
+    """
+    Group full sentences up to ~max_words per chunk.
+    If a single sentence exceeds the cap, hard-split that sentence by words.
+    """
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
     chunks: List[str] = []
     current: List[str] = []
@@ -74,6 +78,7 @@ def chunk_text_by_sentences(text: str, max_words: int) -> List[str]:
             continue
 
         if len(words) > max_words:
+            # Hard-split long sentence
             flush()
             for i in range(0, len(words), max_words):
                 part = " ".join(words[i:i+max_words]).strip()
@@ -91,6 +96,15 @@ def chunk_text_by_sentences(text: str, max_words: int) -> List[str]:
 
     flush()
     return [c for c in chunks if c]
+
+
+def build_topic_prompt() -> str:
+    # Lightweight ask for a short, clean topic
+    return (
+        "Suggest exactly ONE random, creative topic for a character to muse about.\n"
+        "- Output ONLY the topic text, 2–6 words.\n"
+        "- No quotes, punctuation, labels, or explanations."
+    )
 
 
 # ---------- Worker (long-lived in one thread) ----------
@@ -162,14 +176,12 @@ def main() -> int:
     worker.moveToThread(thread)
     thread.start()
 
-    # Prepare persona sequence (wrapped so we can refresh for endless looping)
-    state = {
-        "personas_seq": pick_persona_sequence(cfg, num_chars)
-    }
+    # Prepare persona sequence (endless loop will refresh this each pass)
+    state = {"personas_seq": pick_persona_sequence(cfg, num_chars)}
     index = {"i": 0}
 
     def run_one():
-        # When we finish a pass, pick a fresh random sequence and continue forever
+        # End-of-pass: pick a fresh random set and continue forever
         if index["i"] >= len(state["personas_seq"]):
             window.show_status("Pass complete — picking new characters…")
             state["personas_seq"] = pick_persona_sequence(cfg, num_chars)
@@ -188,13 +200,9 @@ def main() -> int:
                 {"screen_width": width, "screen_height": height}
             )
         window.display_text("")  # clear
-        window.show_status(f"Persona {i+1}/{len(state['personas_seq'])}: {name} • Generating…")
+        window.show_status(f"Persona {i+1}/{len(state['personas_seq'])}: {name} • choosing topic…")
 
-        # (Optional) Swap in a random topic here if you want
-        topic = "amusement parks"
-        prompt = build_prompt(persona, topic)
-
-        # Per-run handlers (with guard to avoid double-advance)
+        # Guard so proceed_next can't double-fire
         guard = {"done": False}
 
         def proceed_next():
@@ -204,29 +212,6 @@ def main() -> int:
             index["i"] += 1
             QTimer.singleShot(0, run_one)
 
-        def on_finished(text: str):
-            max_words = int(persona.get("max_words_per_chunk", 85))
-            chunks = chunk_text_by_sentences(text, max_words)
-            if not chunks:
-                window.display_text("[Empty response]")
-                window.show_status("No content returned — moving on…")
-                proceed_next()
-                return
-
-            window.play_chunks(chunks, delay_seconds=30)
-            window.show_status(f"{name}: showing {len(chunks)} chunks • ≤{max_words} words each")
-
-            # Connect end-of-chunks -> next persona
-            try:
-                window.chunks_finished.disconnect()
-            except Exception:
-                pass
-            window.chunks_finished.connect(proceed_next)
-
-            # Fallback safety in case the signal never fires
-            total_ms = 30_000 * max(1, len(chunks))
-            QTimer.singleShot(total_ms + 2000, proceed_next)
-
         def on_error(msg: str):
             window.display_text(
                 f"[LLM error] {msg}\n\nCheck model_path in config.yaml and your llama-cpp-python install."
@@ -234,7 +219,59 @@ def main() -> int:
             window.show_status("Error — moving to next character")
             proceed_next()
 
-        # Avoid stacking old connections
+        # STEP 1: Ask LLM for a random topic (visible to user)
+        def on_topic_finished(text: str):
+            # Clean topic: take first non-empty line, strip extra punctuation/quotes
+            raw = (text or "").strip()
+            topic = raw.splitlines()[0].strip().strip("\"'“”‘’.,;:- ") or "life"
+            window.display_text(f"Topic: {topic}")
+            window.show_status(f"{name}: topic chosen → {topic}")
+
+            # After a brief beat, generate persona's musings on that topic
+            def start_persona():
+                prompt = build_prompt(persona, topic)
+
+                def on_persona_finished(gen_text: str):
+                    max_words = int(persona.get("max_words_per_chunk", 85))
+                    chunks = chunk_text_by_sentences(gen_text, max_words)
+                    if not chunks:
+                        window.display_text("[Empty response]")
+                        window.show_status("No content returned — moving on…")
+                        proceed_next()
+                        return
+
+                    window.play_chunks(chunks, delay_seconds=30)
+                    window.show_status(f"{name}: showing {len(chunks)} chunks • ≤{max_words} words each")
+
+                    # Connect end-of-chunks -> next persona
+                    try:
+                        window.chunks_finished.disconnect()
+                    except Exception:
+                        pass
+                    window.chunks_finished.connect(proceed_next)
+
+                    # Fallback safety in case the signal never fires
+                    total_ms = 30_000 * max(1, len(chunks))
+                    QTimer.singleShot(total_ms + 2000, proceed_next)
+
+                # Rewire worker for persona generation
+                try:
+                    worker.finished.disconnect()
+                except Exception:
+                    pass
+                try:
+                    worker.error.disconnect()
+                except Exception:
+                    pass
+                worker.finished.connect(on_persona_finished)
+                worker.error.connect(on_error)
+
+                QTimer.singleShot(0, lambda: worker.generate(prompt, 700))
+
+            # Show the topic briefly (e.g., ~1.2s) before generating the content
+            QTimer.singleShot(1200, start_persona)
+
+        # Wire worker for topic generation first
         try:
             worker.finished.disconnect()
         except Exception:
@@ -243,11 +280,11 @@ def main() -> int:
             worker.error.disconnect()
         except Exception:
             pass
-        worker.finished.connect(on_finished)
+        worker.finished.connect(on_topic_finished)
         worker.error.connect(on_error)
 
-        # Invoke generate() inside the worker thread
-        QTimer.singleShot(0, lambda: worker.generate(prompt, 700))
+        topic_prompt = build_topic_prompt()
+        QTimer.singleShot(0, lambda: worker.generate(topic_prompt, 50))
 
     QTimer.singleShot(0, run_one)
     return app.exec_()

@@ -43,9 +43,9 @@ personalities:
       - Sarcastic Cat: "Roller coasters? A gravity-powered regret machine with souvenir photos."
     image_file_name: "cat.png"
     speech_balloon:
-      x_pos: 470
-      y_pos: 90
-      width: 450
+      x_pos: 475
+      y_pos: 140
+      width: 475
       height: 285
     max_words_per_chunk: 85
   - name: detective_squirrel
@@ -71,9 +71,9 @@ personalities:
       - "Do you trust clouds? I mean, they’re just floating there… watching."
     image_file_name: "squirrel.png"
     speech_balloon:
-      x_pos: 470
+      x_pos: 480
       y_pos: 90
-      width: 450
+      width: 435
       height: 285
     max_words_per_chunk: 85
   - name: earnest_angel
@@ -129,11 +129,11 @@ personalities:
       - "You smell like rosemary. You know that’s how they *mark* you for capture, right?"
     image_file_name: "zombie.png"
     speech_balloon:
-      x_pos: 450
+      x_pos: 460
       y_pos: 130
-      width: 470
+      width: 450
       height: 250
-    max_words_per_chunk: 80
+    max_words_per_chunk: 70
   - name: dramatic_goldfish
     display_name: "Overly Dramatic Goldfish"
     prompt_persona: |
