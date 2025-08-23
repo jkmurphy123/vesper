@@ -21,7 +21,7 @@ def pick_persona_sequence(cfg: Dict[str, Any], count: int) -> List[Dict[str, Any
     if not all_personas:
         return [{
             "display_name": "Default Persona",
-            "image_file_name": "ready.jpg",
+            "image_file_name": "startup.png",
             "speech_balloon": {"x_pos": 100, "y_pos": 100, "width": 600, "height": 300},
             "max_words_per_chunk": 85,
             "prompt_persona": "You are a thoughtful narrator.",
@@ -149,7 +149,7 @@ def main() -> int:
         )
     except Exception as e:
         w = ConversationWindow(title=title,
-                               background_path=str(Path(ui_cfg.get("startup_background", "assets/startup.jpg"))),
+                               background_path=str(Path(ui_cfg.get("startup_background", "assets/startup.png"))),
                                ui_cfg=ui_cfg)
         w.resize(width, height)
         w.show()
@@ -158,7 +158,7 @@ def main() -> int:
         return app.exec_()
 
     # Create window once
-    init_bg = str(Path(ui_cfg.get("startup_background", "assets/startup.jpg")))
+    init_bg = str(Path(ui_cfg.get("startup_background", "assets/startup.png")))
     window = ConversationWindow(
         title=title,
         background_path=init_bg,
@@ -192,7 +192,7 @@ def main() -> int:
         name = persona.get("display_name", persona.get("name", "Persona"))
 
         # Update background & balloon for this persona
-        bg_path = str(Path("assets") / persona.get("image_file_name", ui_cfg.get("ready_background", "assets/ready.jpg")))
+        bg_path = str(Path("assets") / persona.get("image_file_name", ui_cfg.get("ready_background", "assets/startup.png")))
         window.set_background(bg_path)
         if hasattr(window, "set_balloon"):
             window.set_balloon(
@@ -224,7 +224,6 @@ def main() -> int:
             # Clean topic: take first non-empty line, strip extra punctuation/quotes
             raw = (text or "").strip()
             topic = raw.splitlines()[0].strip().strip("\"'“”‘’.,;:- ") or "life"
-            window.display_text(f"Topic: {topic}")
             window.show_status(f"{name}: topic chosen → {topic}")
 
             # After a brief beat, generate persona's musings on that topic
