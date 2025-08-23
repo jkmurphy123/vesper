@@ -1,4 +1,4 @@
-# main.py — run N personas sequentially (Jetson-safe: 1 model, 1 worker thread)
+# main.py — loop characters endlessly (Jetson-safe: 1 model, 1 worker thread)
 from __future__ import annotations
 import sys, random, re, yaml
 from pathlib import Path
@@ -19,7 +19,6 @@ def load_config(cfg_path: Path) -> dict:
 def pick_persona_sequence(cfg: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
     all_personas = cfg.get("personalities", []) or []
     if not all_personas:
-        # Fallback persona if none configured
         return [{
             "display_name": "Default Persona",
             "image_file_name": "ready.jpg",
@@ -32,7 +31,6 @@ def pick_persona_sequence(cfg: Dict[str, Any], count: int) -> List[Dict[str, Any
 
     if len(all_personas) >= count:
         return random.sample(all_personas, count)
-    # Not enough unique personas — reuse with randomness
     return [random.choice(all_personas) for _ in range(count)]
 
 
@@ -57,10 +55,6 @@ def build_prompt(persona: Dict[str, Any], topic: str) -> str:
 
 
 def chunk_text_by_sentences(text: str, max_words: int) -> List[str]:
-    """
-    Group full sentences up to ~max_words per chunk.
-    If a single sentence exceeds the cap, hard-split that sentence by words.
-    """
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
     chunks: List[str] = []
     current: List[str] = []
@@ -80,7 +74,6 @@ def chunk_text_by_sentences(text: str, max_words: int) -> List[str]:
             continue
 
         if len(words) > max_words:
-            # Hard-split long sentence
             flush()
             for i in range(0, len(words), max_words):
                 part = " ".join(words[i:i+max_words]).strip()
@@ -141,7 +134,6 @@ def main() -> int:
             top_p=0.95,
         )
     except Exception as e:
-        # Minimal UI to show error
         w = ConversationWindow(title=title,
                                background_path=str(Path(ui_cfg.get("startup_background", "assets/startup.jpg"))),
                                ui_cfg=ui_cfg)
@@ -170,18 +162,23 @@ def main() -> int:
     worker.moveToThread(thread)
     thread.start()
 
-    # Prepare persona sequence
-    personas_seq = pick_persona_sequence(cfg, num_chars)
+    # Prepare persona sequence (wrapped so we can refresh for endless looping)
+    state = {
+        "personas_seq": pick_persona_sequence(cfg, num_chars)
+    }
     index = {"i": 0}
 
     def run_one():
-        i = index["i"]
-        if i >= len(personas_seq):
-            window.show_status("All characters complete. (ESC to quit)")
-            return
+        # When we finish a pass, pick a fresh random sequence and continue forever
+        if index["i"] >= len(state["personas_seq"]):
+            window.show_status("Pass complete — picking new characters…")
+            state["personas_seq"] = pick_persona_sequence(cfg, num_chars)
+            index["i"] = 0
 
-        persona = personas_seq[i]
+        i = index["i"]
+        persona = state["personas_seq"][i]
         name = persona.get("display_name", persona.get("name", "Persona"))
+
         # Update background & balloon for this persona
         bg_path = str(Path("assets") / persona.get("image_file_name", ui_cfg.get("ready_background", "assets/ready.jpg")))
         window.set_background(bg_path)
@@ -191,12 +188,22 @@ def main() -> int:
                 {"screen_width": width, "screen_height": height}
             )
         window.display_text("")  # clear
-        window.show_status(f"Persona {i+1}/{len(personas_seq)}: {name} • Generating…")
+        window.show_status(f"Persona {i+1}/{len(state['personas_seq'])}: {name} • Generating…")
 
-        topic = "amusement parks"  # keep fixed for now
+        # (Optional) Swap in a random topic here if you want
+        topic = "amusement parks"
         prompt = build_prompt(persona, topic)
 
-        # Per-run handlers
+        # Per-run handlers (with guard to avoid double-advance)
+        guard = {"done": False}
+
+        def proceed_next():
+            if guard["done"]:
+                return
+            guard["done"] = True
+            index["i"] += 1
+            QTimer.singleShot(0, run_one)
+
         def on_finished(text: str):
             max_words = int(persona.get("max_words_per_chunk", 85))
             chunks = chunk_text_by_sentences(text, max_words)
@@ -206,30 +213,26 @@ def main() -> int:
                 proceed_next()
                 return
 
-            # Start chunk playback
             window.play_chunks(chunks, delay_seconds=30)
             window.show_status(f"{name}: showing {len(chunks)} chunks • ≤{max_words} words each")
 
-            # Advance AFTER chunks finish showing:
-            if hasattr(window, "chunks_finished"):
-                try:
-                    window.chunks_finished.disconnect()
-                except Exception:
-                    pass
-                window.chunks_finished.connect(proceed_next)
-            else:
-                # Fallback if your ui_renderer.py doesn't emit chunks_finished:
-                total_ms = 30_000 * max(1, len(chunks))
-                QTimer.singleShot(total_ms, proceed_next)
+            # Connect end-of-chunks -> next persona
+            try:
+                window.chunks_finished.disconnect()
+            except Exception:
+                pass
+            window.chunks_finished.connect(proceed_next)
+
+            # Fallback safety in case the signal never fires
+            total_ms = 30_000 * max(1, len(chunks))
+            QTimer.singleShot(total_ms + 2000, proceed_next)
 
         def on_error(msg: str):
-            window.display_text(f"[LLM error] {msg}\n\nCheck model_path in config.yaml and your llama-cpp-python install.")
+            window.display_text(
+                f"[LLM error] {msg}\n\nCheck model_path in config.yaml and your llama-cpp-python install."
+            )
             window.show_status("Error — moving to next character")
             proceed_next()
-
-        def proceed_next():
-            index["i"] += 1
-            QTimer.singleShot(0, run_one)
 
         # Avoid stacking old connections
         try:
@@ -240,7 +243,6 @@ def main() -> int:
             worker.error.disconnect()
         except Exception:
             pass
-
         worker.finished.connect(on_finished)
         worker.error.connect(on_error)
 
