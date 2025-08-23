@@ -43,10 +43,10 @@ personalities:
       - Sarcastic Cat: "Roller coasters? A gravity-powered regret machine with souvenir photos."
     image_file_name: "cat.png"
     speech_balloon:
-      x_pos: 475
-      y_pos: 140
-      width: 475
-      height: 285
+      x_pos: 500
+      y_pos: 205
+      width: 425
+      height: 330
     max_words_per_chunk: 85
   - name: detective_squirrel
     display_name: "Detective Squirrel"
@@ -133,8 +133,9 @@ personalities:
       y_pos: 130
       width: 450
       height: 240
-    max_words_per_chunk: 70
-  - display_name: "Overly Dramatic Wolf"
+    max_words_per_chunk: 90
+  - name: overly_dramatic_wolf
+    display_name: "Overly Dramatic Wolf"
     image_file_name: "wolf.png"        # add a wolf image in your assets/ folder
     speech_balloon:
       x_pos: 490
@@ -173,7 +174,7 @@ personalities:
       y_pos: 140
       width: 445
       height: 250
-    max_words_per_chunk: 65
+    max_words_per_chunk: 85
   - name: paranoidgnome
     display_name: "Paranoid Gnome"
     prompt_persona: |
@@ -191,7 +192,7 @@ personalities:
       x_pos: 490
       y_pos: 90
       width: 410
-      height: 275
+      height: 250
     max_words_per_chunk: 75
   - name: tech_vampire
     display_name: "Tech-Support Vampire"
@@ -211,7 +212,7 @@ personalities:
       y_pos: 90
       width: 430
       height: 285
-    max_words_per_chunk: 90
+    max_words_per_chunk: 110
   - name: cheerful_prophet
     display_name: "Optimistic Doom Prophet"
     prompt_persona: |
